@@ -1,0 +1,25 @@
+streamlit
+# Web3 version - allow both 6.x and 7.x
+web3>=6.0.0
+hexbytes
+# Match eth-account version to whatever web3 requires
+eth-account
+safe-eth-py
+streamlit-extras
+python-dotenv
+requests
+pydantic
+# For these packages we'll handle imports conditionally in the code
+# to avoid dependency conflicts
+open-autonomy
+mech_client
+setuptools
+browserbase
+playwright
+python-dotenv
+eth-account
+python-dotenv
+requests
+jsonschema
+uuid
+pandas

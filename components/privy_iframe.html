@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OLAS Privy Login</title>
+    <style>
+        body {
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        .auth-container {
+            max-width: 400px;
+            width: 100%;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+        .olas-logo {
+            display: block;
+            width: 120px;
+            margin: 0 auto 20px;
+        }
+        .title {
+            text-align: center;
+            color: #4e6ef2;
+            margin-bottom: 20px;
+        }
+        .wallet-info {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #f0f7ff;
+            border-radius: 8px;
+            text-align: center;
+            display: none;
+        }
+        .continue-button {
+            display: block;
+            width: 100%;
+            padding: 10px;
+            margin-top: 10px;
+            background-color: #4e6ef2;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .continue-button:hover {
+            background-color: #3d5ce0;
+        }
+    </style>
+</head>
+<body>
+    <div class="auth-container">
+        <img src="https://autonolas.network/images/logos/olas-logo.svg" alt="OLAS Logo" class="olas-logo">
+        <h2 class="title">Connect to OLAS MCP</h2>
+        
+        <div id="privy-container"></div>
+        
+        <div id="wallet-info" class="wallet-info">
+            <p><strong>Connected Address:</strong> <span id="wallet-address"></span></p>
+            <button id="continue-button" class="continue-button">Continue to OLAS MCP</button>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@privy-io/privy-browser@0.0.1/dist/privy.js"></script>
+    <script>
+        // Get appId from URL parameters
+        const urlParams = new URLSearchParams(window.location.search);
+        const appId = urlParams.get('appId');
+        const componentKey = urlParams.get('key');
+        
+        if (!appId) {
+            document.body.innerHTML = '<p style="color: red; text-align: center;">Error: Missing Privy App ID</p>';
+        } else {
+            // Initialize Privy
+            const privy = new Privy({
+                appId: appId,
+                config: {
+                    loginMethods: ['email', 'google', 'twitter', 'discord'],
+                    appearance: {
+                        theme: 'light',
+                        accentColor: '#4e6ef2',
+                        logo: 'https://autonolas.network/images/logos/olas-logo.svg',
+                        button: {
+                            borderRadius: '8px',
+                            fontSize: '16px',
+                            fontWeight: 'bold',
+                            padding: '12px 20px',
+                        }
+                    },
+                    embeddedWallets: {
+                        createOnLogin: 'all-users',
+                        noPromptOnSignature: true
+                    },
+                    defaultChain: {
+                        id: 100,
+                        name: 'Gnosis Chain',
+                        rpcUrl: 'https://rpc.gnosischain.com'
+                    }
+                },
+                onLogin: async (user) => {
+                    try {
+                        // Get user's wallet
+                        const embeddedWallet = user.linkedAccounts.find(
+                            account => account.type === 'wallet' && account.walletClientType === 'privy'
+                        );
+                        
+                        if (embeddedWallet && embeddedWallet.address) {
+                            // Display wallet info
+                            document.getElementById('wallet-info').style.display = 'block';
+                            document.getElementById('wallet-address').textContent = embeddedWallet.address;
+                            
+                            // Send data to parent
+                            const data = {
+                                from: 'privy',
+                                type: 'AUTH_SUCCESS',
+                                payload: {
+                                    address: embeddedWallet.address,
+                                    userId: user.id,
+                                    authenticated: true,
+                                    email: user.email?.address || null,
+                                    name: user.name || null
+                                }
+                            };
+                            
+                            window.parent.postMessage(data, '*');
+                        }
+                    } catch (error) {
+                        console.error("Error in onLogin:", error);
+                    }
+                },
+                onLogout: () => {
+                    document.getElementById('wallet-info').style.display = 'none';
+                    document.getElementById('wallet-address').textContent = '';
+                    
+                    // Send logout to parent
+                    window.parent.postMessage({
+                        from: 'privy',
+                        type: 'AUTH_SUCCESS',
+                        payload: {
+                            authenticated: false
+                        }
+                    }, '*');
+                }
+            });
+            
+            // Mount the login UI
+            privy.mountLogin(document.getElementById('privy-container'));
+            
+            // Set up continue button
+            document.getElementById('continue-button').addEventListener('click', () => {
+                const address = document.getElementById('wallet-address').textContent;
+                
+                window.parent.postMessage({
+                    from: 'privy', 
+                    type: 'AUTH_SUCCESS',
+                    payload: {
+                        address: address,
+                        authenticated: true,
+                        continueToApp: true
+                    }
+                }, '*');
+            });
+        }
+    </script>
+</body>
+</html> 

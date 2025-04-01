@@ -1,0 +1,71 @@
+{
+  "1f7707f8-034a-452d-869c-9fe619f6522f": {
+    "id": "1f7707f8-034a-452d-869c-9fe619f6522f",
+    "owner_address": "0x7E5F4552091A69125d5DfCb7b8C2659029395Bdf",
+    "safe_address": "0x0000000000000000000000000000000000000000",
+    "prompt": "Analyze the Aave lending LTV's",
+    "selected_tools": [
+      {
+        "name": "DeFiLlamaAPI",
+        "cost": "0.01 xDAI",
+        "available": true,
+        "description": "Access to real-time lending rates and TVL data"
+      },
+      {
+        "name": "SpaceAndTimeDB",
+        "cost": "0.015 xDAI",
+        "available": true,
+        "description": "Advanced quant analysis and risk assessment"
+      }
+    ],
+    "total_cost": 0.025,
+    "created_at": "2025-03-31T15:00:13.995370",
+    "updated_at": "2025-03-31T15:00:58.185757",
+    "request_state": {
+      "status": "completed",
+      "details": {
+        "tx_hash": "0x395bc4179e7a0b8d1d0e0b085aa8e7602014a924c8f0d264c73518a35d00359e"
+      },
+      "timestamp": "2025-03-31T15:00:15.499835"
+    },
+    "payment_state": {
+      "status": "completed",
+      "details": {
+        "tx_hash": "0x29b4ce04ea97ce24b821498c32b2364fb83833c7209e885c24ffe3c80fb05ab3",
+        "amount": 0.025,
+        "method": "safe",
+        "safe_address": "0x0000000000000000000000000000000000000000"
+      },
+      "timestamp": "2025-03-31T15:00:17.006693"
+    },
+    "execution_state": {
+      "status": "completed",
+      "details": {
+        "final_status": "Completed"
+      },
+      "timestamp": "2025-03-31T15:00:58.185757"
+    },
+    "verification_state": null,
+    "request_tx_hash": "0x395bc4179e7a0b8d1d0e0b085aa8e7602014a924c8f0d264c73518a35d00359e",
+    "payment_tx_hash": "0x29b4ce04ea97ce24b821498c32b2364fb83833c7209e885c24ffe3c80fb05ab3",
+    "execution_info": {
+      "requestId": "0x13ea5ff422216533473f3869b8c826694304c413042869fa29cba47e100083c2",
+      "operator": "0xee714e2119b7d7ecd67ffc1005913acc64ef93eb"
+    },
+    "execution_steps": [
+      {
+        "step": "Fetch lending rates",
+        "tool": "DeFiLlamaAPI",
+        "status": "completed",
+        "timestamp": "2025-03-31T15:00:54.725683"
+      },
+      {
+        "step": "Analyze with quant model",
+        "tool": "SpaceAndTimeDB",
+        "status": "completed",
+        "timestamp": "2025-03-31T15:00:56.555229"
+      }
+    ],
+    "final_result": null
+  }
+}

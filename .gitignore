@@ -1,3 +1,5 @@
 .env
 .venv    
-.vscode/context-docs/
+.vscode
+node_modules
+__pycache__

@@ -17,6 +17,10 @@ ETHEREUM_PRIVATE_KEY=0x000000000000000000000000000000000000000000000000000000000
 PRIVY_APP_ID=your-privy-app-id
 PRIVY_API_KEY=your-privy-api-key
 
+# Supabase credentials
+SUPABASE_URL=your-supabase-project-url
+SUPABASE_KEY=your-supabase-anon-key
+
 # Optional Safe address (if you have an existing Safe)
 # SAFE_ADDRESS=0xYourSafeAddress
 

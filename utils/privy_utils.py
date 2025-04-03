@@ -42,37 +42,3 @@ class PrivyAPI:
         except requests.RequestException as e:
             logger.error(f"Privy API request failed: {e}")
             return {"error": str(e)}
-    
-    def get_user(self, user_id: str) -> Dict[str, Any]:
-        """
-        Get user information from Privy.
-        
-        Args:
-            user_id: The Privy user ID
-            
-        Returns:
-            Dict containing user information
-        """
-        return self._make_request("get", f"users/{user_id}")
-    
-    def verify_wallet_ownership(self, user_id: str, address: str) -> bool:
-        """
-        Verify that a wallet address belongs to a user.
-        
-        Args:
-            user_id: The Privy user ID
-            address: The wallet address to verify
-            
-        Returns:
-            True if the wallet belongs to the user, False otherwise
-        """
-        user_data = self.get_user(user_id)
-        if "error" in user_data:
-            return False
-        
-        linked_accounts = user_data.get("linked_accounts", [])
-        for account in linked_accounts:
-            if account.get("type") == "wallet" and account.get("address", "").lower() == address.lower():
-                return True
-        
-        return False

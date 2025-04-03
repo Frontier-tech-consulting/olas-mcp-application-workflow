@@ -2,6 +2,7 @@ from dataclasses import dataclass, field
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 import uuid
+from pydantic import BaseModel
 
 @dataclass
 class ChainConfig:
@@ -76,3 +77,33 @@ class Transaction:
     execution_info: Dict[str, Any] = field(default_factory=dict)
     execution_steps: List[ExecutionStep] = field(default_factory=list)
     final_result: Optional[Dict[str, Any]] = None
+
+class PrivyUser(BaseModel):
+    """Model for Privy user data."""
+    user_id: str  # Supabase user ID
+    privy_user_id: str  # Privy user ID
+    address: str
+    email: Optional[str] = None
+    name: Optional[str] = None
+    linked_accounts: List[Dict[str, Any]] = []
+
+class ChainConfig(BaseModel):
+    """Model for chain configuration."""
+    chain_id: int = 100  # Default to Gnosis Chain
+    rpc_url: str = "https://rpc.gnosischain.com"
+    mech_marketplace: str = "0x4554fE75c1f5576c1d7F765B2A036c199Adae329"
+
+class Tool(BaseModel):
+    """Model for mech tools."""
+    name: str
+    description: str
+    cost: float
+    mech_address: str
+    owner_address: str
+
+class ExecutionStep(BaseModel):
+    """Model for execution steps."""
+    step: str
+    tool: str
+    status: str
+    result: Optional[Dict[str, Any]] = None

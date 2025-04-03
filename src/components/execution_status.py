@@ -447,6 +447,132 @@ class ExecutionStatus:
                     # Display service execution cards - one for each selected service
                     st.markdown("<h3>Service Execution Status</h3>", unsafe_allow_html=True)
                     
+                    # First show the overall processing steps
+                    st.markdown("""
+                    <div style="margin-bottom: 20px;">
+                        <h4>Processing Pipeline</h4>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    # Create a timeline visualization for the processing steps
+                    step_names = [
+                        "Query Analysis",
+                        "Parameter Inference",
+                        "API Execution",
+                        "Service Processing",
+                        "Data Aggregation",
+                        "Result Generation"
+                    ]
+                    
+                    # Determine which steps are complete based on the execution steps
+                    step_statuses = []
+                    for step_name in step_names:
+                        step_found = False
+                        for exec_step in request.execution_steps:
+                            if step_name in exec_step:
+                                step_found = True
+                                break
+                        step_statuses.append(step_found)
+                    
+                    # If no steps are complete yet, mark the first step as active
+                    if not any(step_statuses) and request.execution_status == "running":
+                        step_statuses[0] = "active"
+                    
+                    # Calculate active step index
+                    active_step_idx = -1
+                    if request.execution_status == "running":
+                        for i, status in enumerate(step_statuses):
+                            if status == "active" or (i > 0 and step_statuses[i-1] and not status):
+                                active_step_idx = i
+                                break
+                        if active_step_idx == -1 and any(step_statuses):
+                            # Find the last completed step
+                            for i in range(len(step_statuses)-1, -1, -1):
+                                if step_statuses[i]:
+                                    active_step_idx = i + 1
+                                    if active_step_idx >= len(step_statuses):
+                                        active_step_idx = len(step_statuses) - 1
+                                    break
+                    
+                    # Create timeline progress bar
+                    progress_percent = 0
+                    if request.execution_status == "completed":
+                        progress_percent = 100
+                    elif request.execution_status == "running":
+                        # Calculate progress based on steps completed
+                        completed_count = sum(1 for s in step_statuses if s is True)
+                        progress_percent = min(95, (completed_count / len(step_statuses)) * 100)
+                    
+                    st.markdown(f"""
+                    <div style="margin-bottom: 10px; position: relative; height: 60px;">
+                        <div style="position: absolute; height: 4px; background-color: #e0e0e0; top: 28px; left: 0; right: 0; z-index: 1;"></div>
+                        <div style="position: absolute; height: 4px; background-color: #6200ee; top: 28px; left: 0; width: {progress_percent}%; z-index: 2; transition: width 0.5s ease;"></div>
+                    """, unsafe_allow_html=True)
+                    
+                    # Add timeline step indicators
+                    for i, (step_name, is_complete) in enumerate(zip(step_names, step_statuses)):
+                        left_pos = (i / (len(step_names) - 1)) * 100
+                        
+                        # Determine the status class
+                        if is_complete is True:
+                            status_class = "completed"
+                            icon = "✓"
+                            bg_color = "#4CAF50"
+                        elif i == active_step_idx or is_complete == "active":
+                            status_class = "active"
+                            icon = '<div class="loading-indicator-spinner" style="margin: 5px;"></div>'
+                            bg_color = "#6200ee"
+                        else:
+                            status_class = "pending"
+                            icon = str(i + 1)
+                            bg_color = "#e0e0e0"
+                        
+                        st.markdown(f"""
+                        <div style="position: absolute; left: calc({left_pos}% - 15px); top: 20px; z-index: 3;">
+                            <div style="width: 30px; height: 30px; border-radius: 50%; background-color: {bg_color}; 
+                                 display: flex; align-items: center; justify-content: center; color: white; 
+                                 font-weight: bold; margin-bottom: 5px;">
+                                {icon}
+                            </div>
+                            <div style="text-align: center; font-size: 0.75rem; width: 80px; margin-left: -25px;">
+                                {step_name}
+                            </div>
+                        </div>
+                        """, unsafe_allow_html=True)
+                    
+                    # Close the timeline container
+                    st.markdown("</div>", unsafe_allow_html=True)
+                    
+                    # Display execution steps aligned with the timeline
+                    execution_steps_html = ""
+                    for step in request.execution_steps:
+                        # Determine which phase this step belongs to
+                        phase = ""
+                        for step_name in step_names:
+                            if step_name in step:
+                                phase = step_name
+                                break
+                        
+                        if phase:
+                            color = "#6200ee"
+                        else:
+                            color = "#666"
+                        
+                        execution_steps_html += f"""
+                        <div style="padding: 8px 12px; margin-bottom: 8px; border-left: 3px solid {color}; background-color: #f9f9f9;">
+                            <span style="font-weight: 500;">{step}</span>
+                        </div>
+                        """
+                    
+                    if execution_steps_html:
+                        st.markdown(f"""
+                        <div style="margin-top: 20px; margin-bottom: 30px;">
+                            <h5>Detailed Steps</h5>
+                            {execution_steps_html}
+                        </div>
+                        """, unsafe_allow_html=True)
+                    
+                    # Now show individual service cards
                     for service_state in service_states:
                         state = service_state["state"]
                         service_id = service_state["service_id"]

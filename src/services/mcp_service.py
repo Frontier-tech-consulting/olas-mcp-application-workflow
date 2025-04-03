@@ -136,13 +136,16 @@ class MCPService:
                 service_count = len(request.selected_services) if request.selected_services else 0
                 print(f"Request has {service_count} selected services")
                 
+                # Create initial steps
+                initial_steps = ["Request received", "Validating request parameters"]
+                
                 # Create a mock transaction record
                 self.transactions[transaction_id] = {
                     "request": request.to_dict(),
                     "status": "pending",
                     "created_at": time.time(),
                     "updated_at": time.time(),
-                    "steps": ["Request received", "Validating request parameters"],
+                    "steps": initial_steps,
                     "current_step": 0,
                     "service_count": service_count,
                     "error": None,
@@ -155,10 +158,51 @@ class MCPService:
                 if service_count > 0 and request.prompt:
                     # Process the request with DefiLlamaAPI in the background
                     try:
-                        service_id = request.selected_services[0].get('service_id', '1722')
+                        # Get service ID from first service if available
+                        service_id = None
+                        if request.selected_services and len(request.selected_services) > 0:
+                            first_service = request.selected_services[0]
+                            if isinstance(first_service, dict) and 'service_id' in first_service:
+                                service_id = first_service['service_id']
+                        
+                        # Use default if no valid service ID found
+                        if not service_id:
+                            service_id = "default_service"
+                            
                         print(f"Processing DeFi Llama query for service ID: {service_id}")
+                        
+                        # Get data from DeFi Llama
                         defillama_results = self.defillama_api.process_query(request.prompt, service_id)
+                        
+                        # Store the results in the transaction
                         self.transactions[transaction_id]["defillama_data"] = defillama_results
+                        
+                        # If defillama_results contains processing_steps, pre-populate steps
+                        # to accelerate the visualization
+                        if "processing_steps" in defillama_results:
+                            # Keep the initial steps
+                            pre_steps = initial_steps.copy()
+                            
+                            # Append properly formatted processing steps for the timeline
+                            for step in defillama_results["processing_steps"]:
+                                step_name = step.get("step", "")
+                                step_detail = step.get("detail", "")
+                                step_status = step.get("status", "")
+                                
+                                # Format step for display in the processing pipeline
+                                if "Query Analysis" in step_name:
+                                    pre_steps.append(f"Query Analysis - {step_detail}")
+                                elif "Parameter Inference" in step_name:
+                                    pre_steps.append(f"Parameter Inference - {step_detail}")
+                                elif "API" in step_name:
+                                    pre_steps.append(f"API Execution - {step_detail}")
+                                elif "Data Aggregation" in step_name or "Aggregating" in step_name:
+                                    pre_steps.append(f"Data Aggregation - {step_detail}")
+                            
+                            # Update transaction steps if we have pre-populated steps
+                            if len(pre_steps) > len(initial_steps):
+                                self.transactions[transaction_id]["steps"] = pre_steps
+                        
                         print("DeFi Llama query processed successfully")
                     except Exception as e:
                         print(f"Error processing DeFi Llama query: {str(e)}")
@@ -208,13 +252,22 @@ class MCPService:
             service_count = tx["service_count"]
             steps = tx["steps"].copy()
             
-            # Add steps for service preparation
+            # Accelerate the timeline to complete within one minute
+            # Phase 1: Query Analysis (0-15 seconds)
             if elapsed_time > 2 and len(steps) == 2:
-                steps.append("Preparing selected services")
-                
-            # Add steps for each service execution
+                steps.append("Query Analysis - Understanding request parameters")
+            
+            if elapsed_time > 5 and len(steps) == 3:
+                steps.append("Parameter Inference - Extracting relevant data points")
+            
+            # Phase 2: API Execution (15-30 seconds)
+            if elapsed_time > 10 and len(steps) == 4:
+                steps.append("API Execution - Fetching required data")
+            
+            # Phase 3: Service Processing (30-45 seconds)
+            # Add steps for each service execution in a more compact timeframe
             for i in range(service_count):
-                # Safely extract service name with fallback
+                # Calculate service name
                 try:
                     service_obj = tx["request"]["selected_services"][i] if i < len(tx["request"]["selected_services"]) else {}
                     if isinstance(service_obj, dict):
@@ -223,107 +276,102 @@ class MCPService:
                         service_name = f"Service {i+1}"
                 except (IndexError, KeyError, TypeError):
                     service_name = f"Service {i+1}"
-                    
-                service_start_time = 4 + (i * 3)  # Start times for each service
                 
-                if elapsed_time > service_start_time and len(steps) == 3 + (i * 2):
+                # Service start time - distribute evenly between 15-35 seconds
+                service_start_time = 15 + (i * (20 / max(1, service_count)))
+                
+                if elapsed_time > service_start_time and len(steps) == 5 + i:
                     steps.append(f"Executing service {i+1}: {service_name}")
-                
-                if elapsed_time > service_start_time + 2 and len(steps) == 4 + (i * 2):
-                    steps.append(f"Service {i+1} execution completed")
             
-            # Add final steps
-            if service_count > 0:
-                final_step_time = 4 + (service_count * 3)
-                if elapsed_time > final_step_time and len(steps) == 3 + (service_count * 2):
-                    steps.append("Aggregating service results")
+            # Phase 4: Data Aggregation and Result Generation (45-60 seconds)
+            agg_start_time = 40
+            if service_count > 0 and elapsed_time > agg_start_time and len(steps) == 5 + service_count:
+                steps.append("Data Aggregation - Combining service results")
+            
+            result_time = 50
+            if elapsed_time > result_time and len(steps) == 6 + service_count:
+                steps.append("Result Generation - Preparing final output")
+            
+            # Complete the transaction at the 60-second mark
+            if elapsed_time > 55 and len(steps) == 7 + service_count:
+                steps.append("Request completed")
+                tx["status"] = "completed"
                 
-                if elapsed_time > final_step_time + 2 and len(steps) == 4 + (service_count * 2):
-                    steps.append("Generating final response")
+                # Generate a result with real data if available
+                defillama_data = tx.get("defillama_data")
+                if defillama_data:
+                    # Create a structured result
+                    result = {
+                        "transaction_id": transaction_id,
+                        "request": tx["request"],
+                        "results": {
+                            "summary": defillama_data.get("summary", "Analysis complete"),
+                            "aggregate_result": defillama_data.get("aggregated_data", {}),
+                            "details": [],
+                            "processing_steps": defillama_data.get("processing_steps", [])
+                        }
+                    }
                     
-                # Complete the transaction
-                if elapsed_time > final_step_time + 4 and len(steps) == 5 + (service_count * 2):
-                    steps.append("Request completed")
-                    tx["status"] = "completed"
-                    
-                    # Generate a result with real data if available
-                    defillama_data = tx.get("defillama_data")
-                    if defillama_data:
-                        # Create a structured result
-                        result = {
-                            "transaction_id": transaction_id,
-                            "request": tx["request"],
-                            "results": {
-                                "summary": defillama_data.get("summary", "Analysis complete"),
-                                "aggregate_result": defillama_data.get("aggregated_data", {}),
-                                "details": []
-                            }
+                    # Add details for each service with more descriptive information
+                    for i, service in enumerate(tx["request"]["selected_services"]):
+                        service_id = service.get("service_id", f"S{i+1}")
+                        service_name = service.get("name", service.get("description", f"Service {i+1}"))
+                        
+                        # Extract relevant API calls for this service
+                        relevant_calls = []
+                        if defillama_data and "api_calls" in defillama_data:
+                            # Assign API calls to each service
+                            for call in defillama_data["api_calls"]:
+                                relevant_calls.append(call)
+                        
+                        # Create service-specific output
+                        service_detail = {
+                            "service_id": service_id,
+                            "name": service_name,
+                            "confidence": random.uniform(0.8, 0.99),  # Mock confidence score
+                            "processing_time": f"{random.randint(2, 15)} seconds",
+                            "status": "completed"
                         }
                         
-                        # Add details for each service
-                        for i, service in enumerate(tx["request"]["selected_services"]):
-                            service_id = service.get("service_id", f"S{i+1}")
-                            service_name = service.get("name", f"Service {i+1}")
-                            
-                            # Extract relevant API calls for this service
-                            relevant_calls = []
-                            if defillama_data and "api_calls" in defillama_data:
-                                # Select calls based on service type/ID
-                                for call in defillama_data["api_calls"]:
-                                    relevant_calls.append(call)
-                            
-                            # Create service-specific output
-                            result["results"]["details"].append({
-                                "service_id": service_id,
-                                "name": service_name,
-                                "output": relevant_calls[min(i, len(relevant_calls)-1)] if relevant_calls else "No data available",
-                                "confidence": random.uniform(0.8, 0.99)  # Mock confidence score
-                            })
+                        # Add API call results if available
+                        if relevant_calls:
+                            if i < len(relevant_calls):
+                                service_detail["output"] = relevant_calls[i]
+                            else:
+                                service_detail["output"] = relevant_calls[-1]  # Use the last one
+                        else:
+                            service_detail["output"] = "No API data available"
                         
-                        # Add recommendations based on the data
-                        recommendations = []
-                        
-                        # TVL-based recommendations
-                        if "top_protocols" in defillama_data.get("aggregated_data", {}):
-                            top_protocol = defillama_data["aggregated_data"]["top_protocols"][0]
-                            recommendations.append(
-                                f"Consider focusing on {top_protocol.get('name', 'top protocols')} which has the highest TVL"
-                            )
-                        
-                        # Yield-based recommendations
-                        if "top_yield_pools" in defillama_data.get("aggregated_data", {}):
-                            top_pool = defillama_data["aggregated_data"]["top_yield_pools"][0]
-                            recommendations.append(
-                                f"For highest yields, consider {top_pool.get('pool', 'top pools')} with {top_pool.get('apy', 0):.2f}% APY"
-                            )
-                        
-                        # Add recommendations to the result
-                        if recommendations:
-                            result["results"]["recommendations"] = recommendations
-                        
-                        tx["result"] = json.dumps(result)
-                    else:
-                        # Fallback to a simple result
-                        tx["result"] = json.dumps({
-                            "transaction_id": transaction_id,
-                            "results": {
-                                "summary": "Analysis complete, but no detailed data available",
-                                "aggregate_result": {},
-                                "details": []
-                            }
-                        })
-            else:
-                # If no services selected, complete quickly
-                if elapsed_time > 2 and len(steps) == 3:
-                    steps.append("No services to execute")
-                
-                if elapsed_time > 4 and len(steps) == 4:
-                    steps.append("Request completed")
-                    tx["status"] = "completed"
+                        result["results"]["details"].append(service_detail)
+                    
+                    # Add recommendations based on the data
+                    recommendations = []
+                    
+                    # TVL-based recommendations
+                    if "top_protocols" in defillama_data.get("aggregated_data", {}):
+                        top_protocol = defillama_data["aggregated_data"]["top_protocols"][0]
+                        recommendations.append(
+                            f"Consider focusing on {top_protocol.get('name', 'top protocols')} which has the highest TVL"
+                        )
+                    
+                    # Yield-based recommendations
+                    if "top_yield_pools" in defillama_data.get("aggregated_data", {}):
+                        top_pool = defillama_data["aggregated_data"]["top_yield_pools"][0]
+                        recommendations.append(
+                            f"For highest yields, consider {top_pool.get('pool', 'top pools')} with {top_pool.get('apy', 0):.2f}% APY"
+                        )
+                    
+                    # Add recommendations to the result
+                    if recommendations:
+                        result["results"]["recommendations"] = recommendations
+                    
+                    tx["result"] = json.dumps(result)
+                else:
+                    # Fallback to a simple result
                     tx["result"] = json.dumps({
                         "transaction_id": transaction_id,
                         "results": {
-                            "summary": "No services were selected for execution",
+                            "summary": "Analysis complete, but no detailed data available",
                             "aggregate_result": {},
                             "details": []
                         }

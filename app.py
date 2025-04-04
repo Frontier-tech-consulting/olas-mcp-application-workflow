@@ -4,6 +4,7 @@ from src.models.request import Request
 from src.services.mcp_service import MCPService
 from src.components.request_form import RequestForm
 from src.components.execution_status import ExecutionStatus
+import time
 
 # Initialize session state
 def init_session_state():
@@ -16,7 +17,10 @@ def init_session_state():
         "show_login": True,
         "show_signup": False,
         "current_request": None,
-        "transaction_id": None
+        "transaction_id": None,
+        "chain": "Gnosis Chain",  # Default chain
+        "payment_processing": False,
+        "payment_completed": False
     }
     
     for key, value in defaults.items():
@@ -117,95 +121,51 @@ def app_login():
         <p>Sign in to access the application dashboard</p>
     </div>
     """, unsafe_allow_html=True)
-    
-    # Use columns to make the login/signup toggle buttons side by side
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        if st.button("Login", key="login_toggle", use_container_width=True):
-            st.session_state.show_login = True
-            st.session_state.show_signup = False
-            st.rerun()
-            
-    with col2:
-        if st.button("Sign Up", key="signup_toggle", use_container_width=True):
-            st.session_state.show_login = False
-            st.session_state.show_signup = True
-            st.rerun()
 
-    # Show login form
-    if st.session_state.show_login:
-        with st.form("login_form"):
-            email = st.text_input("Email")
-            password = st.text_input("Password", type="password")
+    # Show single authentication form
+    with st.form("auth_form"):
+        email = st.text_input("Email")
+        password = st.text_input("Password", type="password")
+        
+        # Only show confirm password if in signup mode
+        if not st.session_state.show_login:
+            confirm_password = st.text_input("Confirm Password", type="password")
+        
+        # Using columns to center the submit button and control its width
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col2:
+            # Change button text based on mode
+            button_text = "Login" if st.session_state.show_login else "Sign Up"
+            submit = st.form_submit_button(button_text)
             
-            # Using columns to center the submit button and control its width
-            col1, col2, col3 = st.columns([1, 2, 1])
-            with col2:
-                submit = st.form_submit_button("Login")
-                
-                # Apply custom styling to the form submit button
-                st.markdown("""
-                <style>
-                div[data-testid="stForm"] button[kind="formSubmit"] {
-                    background-color: #6200ee;
-                    color: white;
-                    border: none;
-                }
-                div[data-testid="stForm"] button[kind="formSubmit"]:hover {
-                    background-color: #7722ff;
-                }
-                </style>
-                """, unsafe_allow_html=True)
-                
-            if submit:
-                # Mock authentication
+        if submit:
+            if st.session_state.show_login:
+                # Login logic
                 if email and password:
+                    # Create a mock wallet address
+                    wallet_address = f"0x{email.lower().replace('@', '').replace('.', '')[:8]}...{email.lower().replace('@', '').replace('.', '')[-4:]}"
                     st.session_state.authenticated = True
                     st.session_state.account_info = {
                         "email": email,
-                        "user_id": "mock_user_id"
+                        "user_id": "mock_user_id",
+                        "wallet_address": wallet_address
                     }
                     st.success("Login successful!")
                     st.session_state.page = 'create_request'
                     st.rerun()
                 else:
                     st.error("Please enter both email and password")
-
-    # Show signup form
-    if st.session_state.show_signup:
-        with st.form("signup_form"):
-            email = st.text_input("Email")
-            password = st.text_input("Password", type="password")
-            confirm_password = st.text_input("Confirm Password", type="password")
-            
-            # Using columns to center the submit button and control its width
-            col1, col2, col3 = st.columns([1, 2, 1])
-            with col2:
-                submit = st.form_submit_button("Sign Up")
-                
-                # Apply custom styling to the form submit button
-                st.markdown("""
-                <style>
-                div[data-testid="stForm"] button[kind="formSubmit"] {
-                    background-color: #6200ee;
-                    color: white;
-                    border: none;
-                }
-                div[data-testid="stForm"] button[kind="formSubmit"]:hover {
-                    background-color: #7722ff;
-                }
-                </style>
-                """, unsafe_allow_html=True)
-                
-            if submit:
-                # Mock signup
-                if email and password and confirm_password:
+            else:
+                # Signup logic
+                if email and password and 'confirm_password' in locals() and confirm_password:
                     if password == confirm_password:
+                        # Create a mock wallet address
+                        wallet_address = f"0x{email.lower().replace('@', '').replace('.', '')[:8]}...{email.lower().replace('@', '').replace('.', '')[-4:]}"
                         st.session_state.authenticated = True
                         st.session_state.account_info = {
                             "email": email,
-                            "user_id": "mock_user_id"
+                            "user_id": "mock_user_id", 
+                            "wallet_address": wallet_address
                         }
                         st.success("Signup successful!")
                         st.session_state.page = 'create_request'
@@ -215,26 +175,116 @@ def app_login():
                 else:
                     st.error("Please fill in all fields")
     
+    # Toggle between login and signup modes
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("Login Mode" if not st.session_state.show_login else "Already have an account", key="switch_to_login"):
+            st.session_state.show_login = True
+            st.rerun()
+    with col2:
+        if st.button("Signup Mode" if st.session_state.show_login else "Need an account?", key="switch_to_signup"):
+            st.session_state.show_login = False
+            st.rerun()
+    
     # Back button
     if st.button("Back to App Store"):
         st.session_state.page = 'home'
         st.rerun()
 
-def user_profile_card():
-    """Display user profile card with name and web address"""
-    if st.session_state.authenticated:
-        user_info = st.session_state.account_info
+def display_user_header():
+    """Display the user info in the header if authenticated"""
+    if st.session_state.authenticated and st.session_state.account_info:
+        # Get user info
+        user_email = st.session_state.account_info.get("email", "Anonymous")
+        wallet_address = st.session_state.account_info.get("wallet_address", "")
+        formatted_address = format_eth_address(wallet_address)
+        chain = st.session_state.chain
+        
+        # Display user account info in the top right corner
         st.markdown(f"""
-        <div class="user-profile-card">
-            <h3>{user_info['email']}</h3>
-            <p>Web Address: <a href="https://example.com/{user_info['user_id']}">https://example.com/{user_info['user_id']}</a></p>
-            <p>Safe Address: {user_info['user_id']}</p>
+        <div style="position: absolute; top: 20px; right: 20px; text-align: right; z-index: 1000;">
+            <div style="font-size: 0.9rem; margin-bottom: 5px;">{user_email}</div>
+            <div style="background-color: #000; color: white; padding: 5px 10px; border-radius: 20px; 
+                     font-family: monospace; font-size: 0.85rem; display: inline-block;">
+                {formatted_address} | {chain}
+            </div>
         </div>
         """, unsafe_allow_html=True)
 
+def format_eth_address(address):
+    """Format an Ethereum address for display (shorten with ellipsis)"""
+    if not address or len(address) < 10:
+        return address
+    # Display first 6 and last 4 characters
+    return f"{address[:6]}...{address[-4:]}"
+
+def dashboard():
+    """Display task history and chat sidebar"""
+    # Display task history header
+    st.markdown("<h2>Task History</h2>", unsafe_allow_html=True)
+    
+    # Create mock task history data
+    if 'task_history' not in st.session_state:
+        # Initialize with some mock history data
+        st.session_state.task_history = [
+            {
+                "id": "tx-001",
+                "date": "2023-09-15",
+                "prompt": "Analyze APY rates for Uniswap pools",
+                "services": ["1815", "1966"],
+                "status": "completed"
+            },
+            {
+                "id": "tx-002",
+                "date": "2023-09-20",
+                "prompt": "Compare gas fees across different L2 solutions",
+                "services": ["1722", "1999"],
+                "status": "completed"
+            },
+            {
+                "id": "tx-003",
+                "date": "2023-09-27",
+                "prompt": "Find arbitrage opportunities between DEXs",
+                "services": ["1983", "2010"],
+                "status": "error"
+            }
+        ]
+    
+    # Display task history in a table with styled cards
+    if not st.session_state.task_history:
+        st.info("You don't have any task history yet. Create a new request to get started.")
+    else:
+        for task in st.session_state.task_history:
+            # Determine the status color
+            status_color = "#4CAF50" if task["status"] == "completed" else "#F44336"
+            
+            # Create a styled card for each task
+            st.markdown(f"""
+            <div style="border: 1px solid #e0e0e0; border-radius: 8px; padding: 15px; margin-bottom: 15px; background-color: white;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                    <span style="font-size: 0.9rem; color: #555;">{task["date"]}</span>
+                    <span style="background-color: {status_color}; color: white; padding: 3px 8px; border-radius: 12px; font-size: 0.8rem;">{task["status"].title()}</span>
+                </div>
+                <h4 style="margin-top: 0; margin-bottom: 10px;">{task["prompt"]}</h4>
+                <div style="display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 10px;">
+                    {' '.join([f'<span style="background-color: #f0f0f0; color: #333; padding: 2px 8px; border-radius: 12px; font-size: 0.8rem;">Service {service_id}</span>' for service_id in task["services"]])}
+                </div>
+                <div style="font-family: monospace; font-size: 0.85rem; color: #666; margin-bottom: 10px;">Transaction ID: {task["id"]}</div>
+            </div>
+            """, unsafe_allow_html=True)
+    
+    # Button to create a new request
+    if st.button("Create New Request"):
+        st.session_state.page = 'create_request'
+        st.rerun()
+    
+    # Sidebar for chats
+    st.sidebar.markdown("<h3>Chats</h3>", unsafe_allow_html=True)
+    st.sidebar.write("Chat history will be displayed here.")
+
 def create_request():
     """Create a new request"""
-    # Removed user_profile_card() call
+    # We no longer need to call user_profile_card() here
     
     def handle_submit(request: Request):
         # Submit request to MCP service
@@ -277,6 +327,9 @@ def create_request():
 
 def execution():
     """Display execution status"""
+    # We no longer need to call user_profile_card() here
+    
+    # Check for active request
     if not st.session_state.current_request:
         st.error("No active request found")
         # Give user options instead of automatically redirecting
@@ -291,226 +344,245 @@ def execution():
                 st.rerun()
         return
     
-    # Initialize execution status component
-    status_component = ExecutionStatus(mcp_service)
-    status_component.render(st.session_state.current_request)
-    
-    # Note: The back button is now in the ExecutionStatus component with a unique key
+    # Display the execution status
+    execution_status = ExecutionStatus(st.session_state.current_request)
+    execution_status.render()
 
-# Add a new dashboard page
-def dashboard():
-    """Display task history and chat sidebar"""
-    st.markdown("<h2>Task History</h2>", unsafe_allow_html=True)
-    # Placeholder for task history
-    st.write("Task history will be displayed here.")
+# Process payment and show status
+def process_payment():
+    """Simulate payment processing with a mock blockchain transaction"""
+    if not st.session_state.payment_processing:
+        return
+        
+    # If payment is already completed, do nothing
+    if st.session_state.payment_completed:
+        return
+        
+    # Add a progress bar for payment processing
+    st.markdown("### Processing Payment")
+    progress_placeholder = st.empty()
+    status_placeholder = st.empty()
     
-    # Sidebar for chats
-    st.sidebar.markdown("<h3>Chats</h3>", unsafe_allow_html=True)
-    st.sidebar.write("Chat history will be displayed here.")
+    # Simulate waiting for payment confirmation (takes 20 seconds)
+    total_time = 20  # 20 seconds wait time
+    for i in range(total_time + 1):
+        # Calculate progress percentage
+        progress = i / total_time
+        
+        # Update progress bar
+        progress_placeholder.progress(progress)
+        
+        # Update status message based on progress
+        if progress < 0.3:
+            status_placeholder.info("Initiating blockchain transaction...")
+        elif progress < 0.6:
+            status_placeholder.info("Waiting for network confirmation...")
+        elif progress < 0.9:
+            status_placeholder.info("Validating payment on Gnosis Chain...")
+        else:
+            status_placeholder.info("Finalizing transaction...")
+            
+        # Sleep for a short interval
+        time.sleep(1)
+    
+    # Mark payment as completed
+    st.session_state.payment_completed = True
+    st.session_state.payment_processing = False
+    
+    # Show success message
+    status_placeholder.success("Payment confirmed! Your services are now being processed.")
+    time.sleep(2)
+    
+    # Rerun the app to refresh the state
+    st.rerun()
 
 def main():
     init_session_state()
     
-    # Global CSS Styles
+    # Set page config for a cleaner layout
+    st.set_page_config(
+        page_title="Pearl App Store",
+        page_icon="🔮",
+        layout="wide",
+        initial_sidebar_state="collapsed"
+    )
+    
+    # Apply custom styling
     st.markdown("""
     <style>
-    /* Hide Streamlit UI elements */
-    #MainMenu {visibility: hidden;}
-    header {visibility: hidden;}
-    footer {visibility: hidden;}
-    
-    /* General Styles */
-    .stApp {
-        background-color: #fafafa;
-        color: #2e2e2e;
-    }
-    
-    /* Text color */
-    p, h1, h2, h3, h4, h5, h6, div, span, label {
-        color: #2e2e2e !important;
-    }
-    
-    /* Button Styles - Purple with white text */
-    div.stButton > button {
-        background-color: #6200ee !important;
-        color: white !important;
-        border: none !important;
-    }
-    
-    div.stButton > button:hover {
-        background-color: #7722ff !important;
-    }
-    
-    /* Login/Signup Toggle Buttons */
-    div.stButton > button[data-testid*="login_toggle"],
-    div.stButton > button[data-testid*="signup_toggle"] {
-        background-color: #6200ee !important;
-        color: white !important;
-        border: none !important;
-        border-radius: 4px;
-        padding: 0.375rem 0.75rem;
-        width: 100%;
-        margin: 0;
-    }
-    
-    div.stButton > button[data-testid*="login_toggle"]:hover,
-    div.stButton > button[data-testid*="signup_toggle"]:hover {
-        background-color: #7722ff !important;
-        color: white !important;
-    }
-    
-    div.stButton > button[data-testid*="login_toggle"]:focus,
-    div.stButton > button[data-testid*="signup_toggle"]:focus {
-        box-shadow: none;
-        outline: none;
-    }
-    
-    /* Form Submit Buttons */
-    div[data-testid="stForm"] button[kind="formSubmit"] {
-        background-color: #6200ee !important;
-        color: white !important;
-        border: none !important;
-    }
-    
-    div[data-testid="stForm"] button[kind="formSubmit"]:hover {
-        background-color: #7722ff !important;
-    }
-    
-    /* Card Styles */
-    .card {
-        border-radius: 5px;
-        background-color: white;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-        padding: 20px;
-        margin-bottom: 20px;
-    }
-    
-    /* Header Styles */
-    .header {
-        text-align: center;
-        margin-bottom: 30px;
-    }
-    
-    /* User Profile */
-    .user-profile {
-        display: flex;
-        align-items: center;
-        background-color: white;
-        padding: 10px;
-        border-radius: 5px;
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-    }
-    
-    .user-profile-email {
-        margin-left: 10px;
-        font-weight: 500;
-    }
-    
-    /* App Card Styles */
-    .card {
-        background-color: #ffffff;
-        border-radius: 16px;
-        padding: 1.5rem;
-        margin-bottom: 1.5rem;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-        border: 1px solid #e6e9ed;
-        transition: all 0.3s ease;
-        height: 100%;
-        display: flex;
-        flex-direction: column;
-        justify-content: space-between;
-    }
-    .card:hover {
-        transform: translateY(-4px);
-        box-shadow: 0 8px 12px rgba(0,0,0,0.15);
-    }
-    .card h4 {
-        color: #1a1a1a;
-        font-size: 1.4rem;
-        font-weight: 600;
-        margin-bottom: 1rem;
-    }
-    .card p {
-        color: #666;
-        font-size: 1rem;
-        line-height: 1.5;
-        margin-bottom: 1.5rem;
-        flex-grow: 1;
-    }
-    
-    /* Header Container Style */
-    .header-container {
-        text-align: center;
-        margin-bottom: 3rem;
-        padding: 2rem 0;
-    }
-    .header-container h1 {
-        color: #1a1a1a;
-        font-size: 3rem;
-        font-weight: 700;
-        margin-bottom: 1rem;
-    }
-    .header-container p {
-        color: #666;
-        font-size: 1.2rem;
-        max-width: 600px;
-        margin: 0 auto;
-    }
-    
-    /* Info Box Style */
-    .info-box {
-        background-color: #f8f9fa;
-        padding: 1.5rem;
-        border-radius: 12px;
-        margin-bottom: 3rem;
-        text-align: center;
-    }
-    .info-box h3 {
-        color: #1a1a1a;
-        margin-bottom: 0.5rem;
-        font-size: 1.8rem;
-    }
-    .info-box p {
-        color: #666;
-        font-size: 1.1rem;
-    }
-    
-    /* Tag styles */
-    .app-meta {
-        display: flex;
-        gap: 0.5rem;
-        flex-wrap: wrap;
-    }
-    .tag {
-        background-color: #e6f3ff;
-        color: #0066cc;
-        padding: 0.4rem 0.8rem;
-        border-radius: 20px;
-        font-size: 0.85rem;
-        font-weight: 500;
-        display: inline-block;
-    }
+        /* General styling */
+        [data-testid="stSidebar"] {
+            background-color: #f8f9fa;
+        }
+        
+        /* Header styling */
+        .header-container {
+            margin-bottom: 2rem;
+            text-align: center;
+        }
+        
+        /* Card styling */
+        .card {
+            padding: 1.5rem;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            margin-bottom: 1rem;
+            background-color: #fff;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            height: 100%;
+        }
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 6px 12px rgba(0,0,0,0.15);
+        }
+        
+        /* Button styling */
+        .stButton button {
+            background-color: #000000 !important; 
+            color: #ffffff !important;
+            border: none !important;
+            padding: 0.5rem 1rem !important;
+            border-radius: 4px !important;
+            transition: all 0.3s;
+            font-weight: 600 !important;
+            width: 100%;
+        }
+        .stButton button:hover {
+            background-color: #333333 !important;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        }
+        
+        /* Button text styling - comprehensive selectors */
+        .stButton button p, 
+        .stButton button span,
+        div[data-testid="StyledLinkIconContainer"] p,
+        div[data-testid="StyledLinkIconContainer"] span,
+        button[kind="primary"] p,
+        button[kind="secondary"] p,
+        div[data-baseweb="button"] p,
+        div[data-baseweb="button"] span {
+            color: #ffffff !important;
+            font-weight: 600 !important;
+        }
+        
+        /* Aggressive button text fixing - target all button children */
+        button *, button p, button span, button div {
+            color: #ffffff !important;
+            font-weight: 600 !important;
+        }
+        
+        /* Fix for Streamlit button text */
+        button[kind="primaryFormSubmit"] p,
+        button[kind="secondaryFormSubmit"] p,
+        button[data-baseweb="button"] p,
+        [data-testid="baseButton-secondary"] p,
+        [data-testid="baseButton-primary"] p,
+        [data-testid="StyledFullScreenButton"] span,
+        button[data-testid*="StyledButton"] span {
+            color: #ffffff !important;
+            font-weight: 600 !important;
+        }
+        
+        /* Additional selector for any remaining buttons */
+        div[role="button"] p, 
+        div[role="button"] span {
+            color: #ffffff !important;
+            font-weight: 600 !important;
+        }
+        
+        /* Make sure task history button is styled properly */
+        button[key="task_history_button"] {
+            background-color: #333333 !important;
+            border: 1px solid #000000 !important;
+        }
+        
+        button[key="task_history_button"] p,
+        button[key="task_history_button"] span {
+            color: #ffffff !important;
+            font-weight: 600 !important;
+        }
+        
+        /* App metadata styling */
+        .app-meta {
+            margin-top: 1rem;
+        }
+        .tag {
+            display: inline-block;
+            background-color: #f0f0f0;
+            color: #555;
+            padding: 0.2rem 0.5rem;
+            border-radius: 10px;
+            font-size: 0.8rem;
+            margin-right: 0.5rem;
+        }
+        
+        /* Info box styling */
+        .info-box {
+            margin-bottom: 2rem;
+            padding: 1rem;
+            border-radius: 8px;
+            background-color: #f7f7f7;
+        }
+        
+        /* Improve form spacing */
+        [data-testid="stForm"] {
+            background-color: #f9f9f9;
+            padding: 2rem;
+            border-radius: 8px;
+            max-width: 500px;
+            margin: 0 auto;
+        }
     </style>
     """, unsafe_allow_html=True)
     
-    # Route to the appropriate page
-    if st.session_state.page == 'home':
+    # Display user info in header if authenticated
+    display_user_header()
+    
+    # Process payment if needed
+    if 'payment_processing' in st.session_state and st.session_state.payment_processing and 'payment_completed' in st.session_state and not st.session_state.payment_completed:
+        process_payment()
+    
+    # Navigate to the correct page
+    if st.session_state.page == "home":
         home()
-    elif st.session_state.page == 'app_login':
+    elif st.session_state.page == "app_login":
         app_login()
-    elif st.session_state.page == 'create_request':
-        create_request()
-    elif st.session_state.page == 'execution':
-        execution()
-    elif st.session_state.page == 'dashboard':
-        dashboard()
-    elif st.session_state.page == 'view_execution_status':
-        if 'transaction_id' in st.session_state:
-            display_execution_status(st.session_state.transaction_id)
+    elif st.session_state.page == "create_request":
+        if not st.session_state.authenticated:
+            st.warning("Please login to access this page")
+            st.session_state.page = "app_login"
+            st.rerun()
         else:
+            create_request()
+    elif st.session_state.page == "execution":
+        if not st.session_state.authenticated:
+            st.warning("Please login to access this page")
+            st.session_state.page = "app_login"
+            st.rerun()
+        elif 'current_request' not in st.session_state or not st.session_state.current_request:
+            st.error("No active request found. Please create a new request.")
+            st.session_state.page = "create_request"
+            st.rerun()
+        else:
+            execution()
+    elif st.session_state.page == "dashboard":
+        if not st.session_state.authenticated:
+            st.warning("Please login to access this page")
+            st.session_state.page = "app_login"
+            st.rerun()
+        else:
+            dashboard()
+    elif st.session_state.page == "view_execution_status":
+        if not st.session_state.authenticated:
+            st.warning("Please login to access this page")
+            st.session_state.page = "app_login"
+            st.rerun()
+        elif 'transaction_id' not in st.session_state:
             st.error("No transaction ID found. Please submit a request first.")
             st.session_state.page = 'create_request'
             st.rerun()
+        else:
+            display_execution_status(st.session_state.transaction_id)
     else:
         home()  # Default to home page
 

@@ -6,7 +6,8 @@ class Request:
     """Model for handling MCP service requests"""
     prompt: str
     selected_services: List[dict]
-    total_cost: float
+    user_email: Optional[str] = None
+    total_cost: Optional[str] = None
     request_tx_hash: Optional[str] = None
     payment_tx_hash: Optional[str] = None
     execution_info: Optional[dict] = None
@@ -22,6 +23,7 @@ class Request:
         return {
             "prompt": self.prompt,
             "selected_services": self.selected_services,
+            "user_email": self.user_email,
             "total_cost": self.total_cost,
             "request_tx_hash": self.request_tx_hash,
             "payment_tx_hash": self.payment_tx_hash,

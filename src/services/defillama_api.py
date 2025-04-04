@@ -597,5 +597,5 @@ class DefiLlamaAPI:
 
 # Example usage:
 # defillama_api = DefiLlamaAPI()
-# results = defillama_api.process_query("What's the TVL of Uniswap?", "1722")
+# results = defillama_api.process_query("What's the TVL of Uniswap?", "2101")
 # print(results) 

@@ -13,6 +13,7 @@ from ..models.request import Request
 from langchain.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
 from langchain.schema.messages import SystemMessage, HumanMessage
+import datetime
 
 # Load environment variables
 load_dotenv()
@@ -36,6 +37,10 @@ class RequestForm:
             api_key=os.getenv("OPENAI_API_KEY"),
             streaming=True
         )
+    
+    def update_request_text(self, text):
+        """Update the request text in session state"""
+        st.session_state.request_text = text
     
     def generate_reasoning(self, request_text: str, services: List[Dict[str, Any]]) -> List[str]:
         """
@@ -270,134 +275,191 @@ class RequestForm:
                     recommended_services.extend(service_ids)
         return recommended_services
 
-    def display_service_recommendations(self, services: List[Dict[str, Any]]):
-        """Display service recommendations and allow user to select services"""
-        # Ensure session state variables are initialized without creating recursive loops
+    def display_service_recommendations(self, reasoning_steps: List[str]):
+        """
+        Display service recommendations and allow user to select services.
+        
+        Args:
+            reasoning_steps: List of reasoning steps from the reasoning agent
+        """
+        # Get services from MCP service
+        mcp_service = self.mcp_service_instance
+        all_services = mcp_service.get_available_services()
+        
+        # Extract recommended service IDs from reasoning steps
         if 'recommended_services' not in st.session_state:
-            st.session_state.recommended_services = []
-            
+            recommended_service_ids = self.extract_recommended_services(reasoning_steps)
+            # Store in session state to avoid recalculating
+            st.session_state.recommended_services = recommended_service_ids
+        else:
+            recommended_service_ids = st.session_state.recommended_services
+        
+        # Initialize checkbox state if not already done
         if 'checkboxes' not in st.session_state:
             st.session_state.checkboxes = {}
-            
-        if 'selected_services' not in st.session_state:
-            st.session_state.selected_services = []
-            
-        if 'total_cost' not in st.session_state:
-            st.session_state.total_cost = 0
-            
-        # Display warning if no recommendations
-        if not st.session_state.recommended_services:
-            st.warning("No specific services were recommended. Please select from available services below.")
         
-        st.markdown("## Recommended Services")
-        st.markdown("The following services are recommended based on your request:")
+        # Select services based on IDs
+        recommended_services = []
+        other_services = []
         
-        # Filter services to show recommended ones first, then others
-        recommended_ids = set(st.session_state.recommended_services)
-        recommended_services = [s for s in services if s.get('service_id', '') in recommended_ids]
-        other_services = [s for s in services if s.get('service_id', '') not in recommended_ids]
+        for service in all_services:
+            service_id = service.get('id') or service.get('service_id')
+            # Generate a unique ID if service_id is None
+            if not service_id:
+                service_id = f"service-{hash(str(service))}"
+                
+            # Ensure the service has a price
+            if 'price' not in service:
+                service['price'] = float(service.get('cost', 10))
+            
+            if service_id in recommended_service_ids:
+                recommended_services.append(service)
+            else:
+                other_services.append(service)
         
-        # Track selected services and total cost for this render cycle
-        current_selected_services = []
-        current_total_cost = 0
+        # Divide the page into sections
+        st.markdown("### Recommended Services")
+        
+        # Initialize variables to track selections
+        selected_services = []
+        total_cost = 0.0
         
         # Display recommended services
         if recommended_services:
-            self._display_service_group(recommended_services, current_selected_services, current_total_cost)
+            for service in recommended_services:
+                self._render_service_card(service, selected_services, total_cost)
+        else:
+            st.info("No services were specifically recommended based on your request.")
         
-        # Display other services if there are no recommended ones or as additional options
-        if not recommended_services:
-            st.markdown("### Available Services")
-            st.markdown("Select from the following available services:")
-            self._display_service_group(other_services[:3], current_selected_services, current_total_cost)
+        # Display other available services
+        st.markdown("### Other Available Services")
+        for service in other_services:
+            self._render_service_card(service, selected_services, total_cost)
         
-        # Update session state with the current selections
-        st.session_state.selected_services = current_selected_services
-        st.session_state.total_cost = current_total_cost
+        # Recalculate total cost based on current selections
+        total_cost = sum(service.get('price', 10.0) for service in selected_services)
         
-        # If we have selected services, show payment summary
-        if current_selected_services:
-            st.markdown("## Payment Summary")
-            st.markdown(f"**Total Cost:** {current_total_cost} OLAS")
+        # Display payment summary if services are selected
+        if selected_services:
+            st.markdown("### Payment Summary")
+            st.markdown(f"**Total Cost:** {total_cost:.2f} OLAS")
             
-            if st.button("Confirm and Pay", key="payment_button"):
-                # Handle payment confirmation with proper flow control
-                self.handle_payment_confirmation(current_selected_services)
-    
-    def _display_service_group(self, service_group: List[Dict[str, Any]], 
-                               selected_services: List[Dict[str, Any]], 
-                               total_cost: int) -> None:
-        """Helper method to display a group of services with checkboxes"""
-        for service in service_group:
-            service_id = service.get('service_id', '')
-            if not service_id:
-                continue
+            # Create two columns for buttons
+            col1, col2 = st.columns([1, 1])
             
-            checkbox_key = f"service_{service_id}"
+            with col1:
+                if st.button("Proceed to Payment", key="proceed_to_payment"):
+                    # Set payment confirmation in session state
+                    st.session_state.payment_confirmed = True
+                    
+                    # Call handle payment to create request object
+                    self.handle_payment_confirmation(selected_services)
+                    
+                    # Navigate to execution page
+                    st.session_state.page = 'execution'
+                    st.rerun()
             
-            # Create a styled card for each service
-            st.markdown(f"""
-            <div class="recommended-service">
-                <h4>{service.get('description', 'Service').split(' - ')[0]}</h4>
-                <p>{service.get('description', '')}</p>
-                <p>
-                    <span class="service-price">Cost: 10 OLAS</span>
-                    <span class="service-mech-address">Mech: {service.get('mech_address', 'N/A')}</span>
-                </p>
-            </div>
-            """, unsafe_allow_html=True)
+            with col2:
+                if st.button("Reset Selections", key="reset_selections"):
+                    # Reset checkboxes and selections
+                    st.session_state.checkboxes = {}
+                    st.rerun()
+        else:
+            st.info("Select at least one service to proceed.")
+
+    def _render_service_card(self, service, selected_services, total_cost):
+        """
+        Render a single service card with checkbox.
+        
+        Args:
+            service: Service dictionary to render
+            selected_services: List to append selected services to
+            total_cost: Running total cost value (not used, cost is recalculated later)
+        """
+        service_id = service.get('id') or service.get('service_id')
+        # Generate a unique ID if service_id is None
+        if not service_id:
+            service_id = f"service-{hash(str(service))}"
             
-            # Get the initial state without creating a recursive reference
-            initial_state = False
-            if checkbox_key in st.session_state.checkboxes:
-                initial_state = st.session_state.checkboxes[checkbox_key]
-            
-            # Add checkbox for selection
-            is_checked = st.checkbox(
-                f"Select Service {service_id}",
-                value=initial_state,
-                key=checkbox_key
-            )
-            
-            # Update the checkbox state in session_state
-            st.session_state.checkboxes[checkbox_key] = is_checked
-            
-            # Update selected services and total cost if checked
-            if is_checked:
-                selected_services.append(service)
-                total_cost += 10  # Fixed price of 10 OLAS per service
+        service_name = service.get('name') or service.get('description', 'Unknown Service')
+        service_price = service.get('price', 10.0)
+        checkbox_key = f"checkbox_{service_id}"
+        
+        # Display service card
+        st.markdown(f"""
+        <div class="recommended-service">
+            <h4>{service_name} (ID: {service_id})</h4>
+            <p>{service.get('description', '')}</p>
+            <p>
+                <span class="service-price">Cost: {service_price} OLAS</span>
+                <span class="service-mech-address">Mech: {service.get('mech_address', 'N/A')}</span>
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        # Get the initial state without creating a recursive reference
+        initial_state = False
+        if checkbox_key in st.session_state.checkboxes:
+            initial_state = st.session_state.checkboxes[checkbox_key]
+        
+        # Add checkbox for selection
+        is_checked = st.checkbox(
+            f"Select Service {service_id}",
+            value=initial_state,
+            key=checkbox_key
+        )
+        
+        # Update the checkbox state in session_state
+        st.session_state.checkboxes[checkbox_key] = is_checked
+        
+        # Update selected services if checked
+        if is_checked:
+            selected_services.append(service)
 
     def handle_payment_confirmation(self, selected_services: List[Dict[str, Any]]):
         """Handle payment confirmation and transition to execution page"""
         try:
-            # Calculate total cost as a string
-            total_cost = str(len(selected_services) * 10) + " OLAS"
+            # Calculate total cost from selected services
+            total_cost_value = sum(service.get('price', 10) for service in selected_services)
+            total_cost = f"{total_cost_value:.2f} OLAS"
             
-            # Create a Request object with the prompt and selected services
-            request = Request(
-                prompt=st.session_state.request_text,
-                selected_services=selected_services,
-                user_email=self.user_email,
-                total_cost=total_cost
-            )
+            # Create a dictionary request object with the prompt and selected services
+            request = {
+                "prompt": st.session_state.request_text,
+                "selected_services": selected_services,
+                "user_email": self.user_email,
+                "total_cost": total_cost_value,
+                "submitted_at": datetime.datetime.now().isoformat()
+            }
             
             # Submit the request with a spinner to indicate processing
             with st.spinner("Preparing payment..."):
                 # Store the request in session state for the execution page
                 st.session_state.current_request = request
                 
-                # Clear any previous execution state
-                if 'execution_complete' in st.session_state:
-                    st.session_state.pop('execution_complete')
-                if 'execution_result' in st.session_state:
-                    st.session_state.pop('execution_result')
-                    
                 # Set up payment processing flags for app.py to handle
                 st.session_state.payment_processing = True
                 st.session_state.payment_completed = False
                 
                 # Submit the request directly to obtain a transaction ID
-                self.submit_callback(request)
+                if self.submit_callback:
+                    try:
+                        self.submit_callback(request)
+                    except Exception as e:
+                        st.warning(f"Callback warning: {str(e)}")
+                
+                # Log this request regardless of callback success
+                if "submitted_requests" not in st.session_state:
+                    st.session_state.submitted_requests = []
+                
+                # Add to submitted requests list if not already there
+                if request not in st.session_state.submitted_requests:
+                    st.session_state.submitted_requests.append(request)
+                
+                # Navigate to execution page
+                st.session_state.page = 'execution'
+                st.rerun()
+                
         except Exception as e:
             st.error(f"Error submitting request: {str(e)}")
             import traceback
@@ -633,60 +695,88 @@ class RequestForm:
         if 'request_text' not in st.session_state:
             st.session_state.request_text = ""
         
-        # Input for request description
-        request_description = st.text_area(
-            "Describe your request",
-            placeholder="e.g., Analyze the current APY rates for Uniswap liquidity pools",
-            height=150,
-            key="request_input"
+        # Add text area for request description
+        if 'request_text' in st.session_state and st.session_state.request_text:
+            request_text_value = st.session_state.request_text
+        elif 'request_textarea' in st.session_state and st.session_state.request_textarea:
+            request_text_value = st.session_state.request_textarea
+            # Also update request_text
+            st.session_state.request_text = request_text_value
+        else:
+            request_text_value = ""
+        
+        st.text_area(
+            "Request Description",
+            value=request_text_value,
+            height=120,
+            key="request_textarea",
+            on_change=self.update_text_callback
         )
         
-        # Handle evaluate button
-        col1, col2 = st.columns([3, 1])
-        with col1:
-            if st.button("Evaluate Request", key="evaluate_button", help="Analyze this request and recommend services"):
-                if request_description:
-                    # Store for later use
-                    st.session_state.request_text = request_description
-                    
-                    # Reset previous selections
-                    st.session_state.checkboxes = {}
-                    st.session_state.selected_services = []
-                    st.session_state.reasoning_complete = False
-                    st.session_state.reasoning_response = []
-                    st.session_state.payment_confirmed = False
-                    st.session_state.request_submitted = False
-                    st.session_state.transaction_id = None
-                    
-                    # Set up progress bar
-                    progress_bar = st.progress(0)
-                    
-                    # Set up streaming callback
-                    with st.spinner("Generating reasoning..."):
-                        try:
-                            # Render the reasoning agent
-                            self.render_reasoning_agent(request_description, services)
-                            
-                            # Update progress
-                            progress_bar.progress(100)
-                        except Exception as e:
-                            st.error(f"Error during reasoning generation: {str(e)}")
-                            # Still show service recommendations with default services
-                            st.session_state.reasoning_complete = True
-                            st.session_state.recommended_services = []  # Use default services
-                            progress_bar.progress(100)
-                else:
-                    st.warning("Please enter a request description.")
+        # Create columns for the buttons
+        col1, col2 = st.columns([1, 1])
         
+        # Place the evaluate button in the first column
+        with col1:
+            # Add button to evaluate request
+            if st.button("Evaluate Request", key="evaluate_button"):
+                # Ensure we have request text from either session state or the text area
+                request_text_to_use = st.session_state.get('request_text', '') or st.session_state.get('request_textarea', '')
+                
+                # Update session state directly
+                if not st.session_state.get('request_text') and st.session_state.get('request_textarea'):
+                    st.session_state.request_text = st.session_state.get('request_textarea', '')
+                
+                if request_text_to_use and request_text_to_use.strip():
+                    st.session_state.show_reasoning = True
+                    # Trigger reasoning agent
+                    self.render_reasoning_agent(request_text_to_use, services)
+                    # Set reasoning complete to show service recommendations
+                    st.session_state.reasoning_complete = True
+                    # Rerun to update UI
+                    st.rerun()
+                else:
+                    st.error("Please enter a request description in the text area above.")
+        
+        # Place the task history button in the second column
         with col2:
-            if st.button("Task History", key="task_history_button", help="View your task history"):
-                # Navigate to the dashboard/task history page
-                st.session_state.page = 'dashboard'
+            # Add button to view task history
+            if st.button("Task History", key="task_history_button"):
+                # Navigate to dashboard page
+                st.session_state.page = "dashboard"
                 st.rerun()
+        
+        # Display infrastructure stats in a grid
+        st.markdown("### Network Infrastructure")
+        
+        # Create 3 columns for stats
+        cols = st.columns(3)
+        
+        # Format the infrastructure data
+        infra_metrics = [
+            {"label": "Active Mechs", "value": infrastructure_data.get("active_mechs", 25), "unit": ""},
+            {"label": "Network Health", "value": infrastructure_data.get("network_health", 98), "unit": "%"},
+            {"label": "Avg Response Time", "value": infrastructure_data.get("avg_response_time", 2.5), "unit": "s"}
+        ]
+        
+        # Display each metric in its own column
+        for i, metric in enumerate(infra_metrics):
+            with cols[i]:
+                st.markdown(f"""
+                <div style="text-align: center; padding: 10px; background-color: white; 
+                          border-radius: 5px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                    <div style="font-size: 2rem; font-weight: bold;">{metric['value']}{metric['unit']}</div>
+                    <div style="font-size: 0.9rem; color: #555;">{metric['label']}</div>
+                </div>
+                """, unsafe_allow_html=True)
+        
+        # Display reasoning steps if requested
+        if hasattr(st.session_state, 'show_reasoning') and st.session_state.show_reasoning and 'reasoning_response' in st.session_state:
+            self.display_reasoning_steps(st.session_state.reasoning_response)
         
         # Display service recommendations if reasoning is complete
         if st.session_state.reasoning_complete:
-            self.display_service_recommendations(services)
+            self.display_service_recommendations(st.session_state.reasoning_response)
         
         # Don't use st.rerun() in the main render flow to avoid infinite loops
         # Instead, let Streamlit's natural flow control handle the UI updates
@@ -697,4 +787,13 @@ class RequestForm:
             if st.session_state.page != 'execution':
                 st.session_state.reasoning_complete = False
                 st.session_state.reasoning_response = []
-                st.session_state.payment_confirmed = False 
+                st.session_state.payment_confirmed = False
+
+    def update_text_callback(self):
+        """Callback function for text area changes"""
+        if "request_textarea" in st.session_state:
+            try:
+                self.update_request_text(st.session_state.request_textarea)
+            except AttributeError:
+                # Direct fallback if method is not found
+                st.session_state.request_text = st.session_state.request_textarea 

@@ -13,6 +13,7 @@ pydantic
 # to avoid dependency conflicts
 open-autonomy>=0.18.0
 mech_client>=0.2.13
+open-aea-cli-ipfs>=1.50.0
 setuptools
 browserbase
 playwright

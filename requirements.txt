@@ -11,8 +11,8 @@ requests
 pydantic
 # For these packages we'll handle imports conditionally in the code
 # to avoid dependency conflicts
-open-autonomy==0.18.0
-mech_client==0.2.13
+open-autonomy>=0.18.0
+mech_client>=0.2.13
 setuptools
 browserbase
 playwright

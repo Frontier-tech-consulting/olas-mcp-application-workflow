@@ -4,3 +4,5 @@
 node_modules
 __pycache__
 **/.next/
+
+ethereum_private_key.txt

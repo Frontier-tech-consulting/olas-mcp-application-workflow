@@ -1,0 +1,46 @@
+{
+  "name": "Olas browser automation",
+  "version": "0.0.1",
+  "manifest_version": 2,
+  
+  "description": "A user-friendly interface for running browser automation tasks using olas mech service.",
+  "browser_action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "homepage_url": "http://amicus5.com",
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "default_locale": "en",
+  "background": {
+    "page": "src/bg/background.html",
+    "persistent": true
+  },
+  "permissions": [
+    "https://*/*",
+     "storage",
+     "tabs"
+  ],
+  "content_scripts": [
+    {
+      "run_at": "document_start",
+      "matches": [
+        "https://*/*"
+      ],
+      "js": [
+        "js/jquery/jquery.js",
+        "src/inject/inject.js"
+      ]
+    }
+  ],
+  "web_accessible_resources": [
+       "extra.js"
+  ]
+}

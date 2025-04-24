@@ -14,6 +14,7 @@ from langchain.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
 from langchain.schema.messages import SystemMessage, HumanMessage
 import datetime
+import pandas as pd
 
 # Load environment variables
 load_dotenv()
@@ -38,6 +39,27 @@ class RequestForm:
             streaming=True
         )
     
+    def render_tool_data(self):
+        """Render the request form component"""
+        # ...existing code...
+
+        # --- Insert this block after displaying the header and before the text area ---
+        # Display Tool Accuracy Performance bar chart from HuggingFace CSV
+        try:
+            url = "https://huggingface.co/datasets/valory/Olas-predict-dataset/raw/main/tools_accuracy.csv"
+            df = pd.read_csv(url)
+            st.subheader("Tool accuracy performance")
+            st.caption("credits : Valory huggingface tool metrics data")
+            if "tool" in df.columns and "accuracy" in df.columns:
+                st.bar_chart(data=df, x="tool", y="accuracy")
+            else:
+                st.warning("Tool accuracy data format is invalid.")
+        except Exception as e:
+            st.warning(f"Could not load tool accuracy data: {e}")
+
+
+
+
     def update_request_text(self, text):
         """Update the request text in session state"""
         st.session_state.request_text = text
@@ -747,28 +769,28 @@ class RequestForm:
                 st.rerun()
         
         # Display infrastructure stats in a grid
-        st.markdown("### Network Infrastructure")
+        # st.markdown("### Network Infrastructure")
         
-        # Create 3 columns for stats
-        cols = st.columns(3)
+        # # Create 3 columns for stats
+        # cols = st.columns(3)
         
-        # Format the infrastructure data
-        infra_metrics = [
-            {"label": "Active Mechs", "value": infrastructure_data.get("active_mechs", 25), "unit": ""},
-            {"label": "Network Health", "value": infrastructure_data.get("network_health", 98), "unit": "%"},
-            {"label": "Avg Response Time", "value": infrastructure_data.get("avg_response_time", 2.5), "unit": "s"}
-        ]
+        # # Format the infrastructure data
+        # infra_metrics = [
+        #     {"label": "Active Mechs", "value": infrastructure_data.get("active_mechs", 25), "unit": ""},
+        #     {"label": "Network Health", "value": infrastructure_data.get("network_health", 98), "unit": "%"},
+        #     {"label": "Avg Response Time", "value": infrastructure_data.get("avg_response_time", 2.5), "unit": "s"}
+        # ]
         
-        # Display each metric in its own column
-        for i, metric in enumerate(infra_metrics):
-            with cols[i]:
-                st.markdown(f"""
-                <div style="text-align: center; padding: 10px; background-color: white; 
-                          border-radius: 5px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
-                    <div style="font-size: 2rem; font-weight: bold;">{metric['value']}{metric['unit']}</div>
-                    <div style="font-size: 0.9rem; color: #555;">{metric['label']}</div>
-                </div>
-                """, unsafe_allow_html=True)
+        # # Display each metric in its own column
+        # for i, metric in enumerate(infra_metrics):
+            # with cols[i]:
+            #     st.markdown(f"""
+            #     <div style="text-align: center; padding: 10px; background-color: white; 
+            #               border-radius: 5px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+            #         <div style="font-size: 2rem; font-weight: bold;">{metric['value']}{metric['unit']}</div>
+            #         <div style="font-size: 0.9rem; color: #555;">{metric['label']}</div>
+            #     </div>
+            #     """, unsafe_allow_html=True)
         
         # Display reasoning steps if requested
         if hasattr(st.session_state, 'show_reasoning') and st.session_state.show_reasoning and 'reasoning_response' in st.session_state:

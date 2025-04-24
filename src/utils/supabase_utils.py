@@ -1,18 +1,27 @@
 import os
+import dotenv
 from supabase import create_client, Client
 from typing import Dict, Any, Optional
 import logging
 import re
-
+from dotenv import load_dotenv
+from pathlib import Path
 logger = logging.getLogger(__name__)
+import sys
 
-class SupabaseClient:
+## getting the relative path of the .env from the root using path 
+dotenv_path = Path(__file__).resolve().parent.parent / '.env'
+#dotenv_path=os.path.join(os.path.dirname(__file__), '.env')
+
+load_dotenv(dotenv_path=dotenv_path)
+
+class SupabaseObj:
     """Utility class for interacting with Supabase."""
     
     def __init__(self):
         """Initialize the Supabase client."""
-        supabase_url = os.environ.get("SUPABASE_URL")
-        supabase_key = os.environ.get("SUPABASE_KEY")
+        supabase_url = os.getenv("SUPABASE_URL")
+        supabase_key = os.getenv("SUPABASE_KEY")
         
         if not supabase_url or not supabase_key:
             raise ValueError("SUPABASE_URL and SUPABASE_KEY must be set in environment variables")
@@ -123,4 +132,28 @@ class SupabaseClient:
             
         except Exception as e:
             logger.error(f"Error in update_user_wallet: {e}")
-            return None 
+            return None
+    
+    def save_session_state(self, privy_user_id: str, state: dict):
+        """Save or update session state for a user."""
+        try:
+            response = self.client.table('session_state').upsert({
+                'privy_user_id': privy_user_id,
+                'state': state,
+                'updated_at': 'now()'
+            }).execute()
+            return response.data[0] if response.data else None
+        except Exception as e:
+            logger.error(f"Error saving session state: {e}")
+            return None
+
+    def load_session_state(self, privy_user_id: str) -> Optional[dict]:
+        """Load session state for a user."""
+        try:
+            response = self.client.table('session_state').select('state').eq('privy_user_id', privy_user_id).execute()
+            if response.data and len(response.data) > 0:
+                return response.data[0]['state']
+            return None
+        except Exception as e:
+            logger.error(f"Error loading session state: {e}")
+            return None

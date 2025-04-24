@@ -9,6 +9,7 @@ import re
 import os
 import sys
 import pandas as pd
+import copy
 from langchain.schema.output_parser import StrOutputParser
 from langchain_core.output_parsers import JsonOutputParser
 from langchain.prompts import ChatPromptTemplate
@@ -1546,3 +1547,30 @@ class ExecutionStatus:
                 # If in progress, show spinner
                 if step_status == 'in_progress':
                     st.spinner("Processing...")
+    
+    def deep_copy_request(self, request):
+        """Safely deep copy a request object (dict or custom class)."""
+        try:
+            return copy.deepcopy(request)
+        except Exception:
+            # Fallback: shallow copy
+            return dict(request) if hasattr(request, 'items') else request
+        
+    def run_mechx_interact(self, prompt, agent_id, tool_name, key_path, chain_config="gnosis", confirm_type="on-chain"):
+        """
+        Run the mechx interact command with the given parameters and stream the output to the UI.
+        """
+        import subprocess
+        import shlex
+        st.markdown("### Mech Client Execution Log")
+        cmd = f"mechx interact {shlex.quote(prompt)} --agent_id {shlex.quote(str(agent_id))} --key {shlex.quote(key_path)} --tool {shlex.quote(tool_name)} --chain-config {shlex.quote(chain_config)} --confirm {shlex.quote(confirm_type)}"
+        st.info(f"Running: `{cmd}`")
+        process = subprocess.Popen(shlex.split(cmd), stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
+        output_box = st.empty()
+        output_lines = []
+        for line in process.stdout:
+            output_lines.append(line.rstrip())
+            output_box.code("\n".join(output_lines), language="bash")
+        process.stdout.close()
+        process.wait()
+        st.success("Mech request complete.")

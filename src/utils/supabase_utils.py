@@ -1,6 +1,6 @@
 import os
 import dotenv
-from supabase import create_client, Client
+from supabase import  Client, create_client
 from typing import Dict, Any, Optional
 import logging
 import re
@@ -10,18 +10,18 @@ logger = logging.getLogger(__name__)
 import sys
 
 ## getting the relative path of the .env from the root using path 
-dotenv_path = Path(__file__).resolve().parent.parent / '.env'
-#dotenv_path=os.path.join(os.path.dirname(__file__), '.env')
+# dotenv_path = Path(__file__).parent.parent.parent.resolve() / '.env'
 
-load_dotenv(dotenv_path=dotenv_path)
+# print(f"env file loaded: {load_dotenv(dotenv_path=dotenv_path)}")
 
 class SupabaseObj:
     """Utility class for interacting with Supabase."""
     
     def __init__(self):
         """Initialize the Supabase client."""
-        supabase_url = os.getenv("SUPABASE_URL")
-        supabase_key = os.getenv("SUPABASE_KEY")
+        ## NOTE: based on the deployment setup, you will need to define the vars in the .env file
+        supabase_url: str = os.getenv("SUPABASE_URL")
+        supabase_key: str = os.getenv("SUPABASE_KEY")
         
         if not supabase_url or not supabase_key:
             raise ValueError("SUPABASE_URL and SUPABASE_KEY must be set in environment variables")
@@ -29,21 +29,21 @@ class SupabaseObj:
         try:
             # Extract project ID from the connection string
             # Format: postgresql://postgres.[PROJECT_ID]:[PASSWORD]@[HOST]:[PORT]/postgres
-            match = re.search(r'postgresql://postgres\.([^:]+):', supabase_url)
-            if match:
-                project_id = match.group(1)
-                # Construct the Supabase URL in the correct format
-                supabase_url = f"https://{project_id}.supabase.co"
-                logger.info(f"Using Supabase URL: {supabase_url}")
-            else:
-                # If the URL is already in the correct format, use it as is
-                if not supabase_url.startswith("https://"):
-                    supabase_url = f"https://{supabase_url}"
-                logger.info(f"Using provided Supabase URL: {supabase_url}")
+            #match = re.search(r'postgresql://postgres\.([^:]+):', supabase_url)
+            # if match:
+            #     project_id = match.group(1)
+            #     # Construct the Supabase URL in the correct format
+            #     supabase_url = f"https://{project_id}.supabase.co"
+            #     logger.info(f"Using Supabase URL: {supabase_url}")
+            # else:
+            #     # If the URL is already in the correct format, use it as is
+            #     if not supabase_url.startswith("https://"):
+            #         supabase_url = f"{supabase_url}"
+            #     logger.info(f"Using provided Supabase URL: {supabase_url}")
             
-            self.client: Client = create_client(supabase_url, supabase_key)
-            # Test the connection
-            self.client.table('users').select('count').limit(1).execute()
+            self.client: Client = Client(supabase_url, supabase_key)
+            # # Test the connection
+            # self.client.table('users').select('count').limit(1).execute()
             logger.info("Successfully connected to Supabase")
         except Exception as e:
             logger.error(f"Failed to initialize Supabase client: {e}")

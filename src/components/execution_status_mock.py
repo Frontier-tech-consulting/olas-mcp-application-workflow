@@ -3,6 +3,8 @@ import streamlit as st
 import time
 import random
 from typing import Dict, Any, Optional, Callable
+import pandas as pd
+from datetime import datetime, timedelta
 
 class ExecutionStatus:
     """Component for displaying execution status and collecting feedback."""
@@ -395,3 +397,30 @@ class ExecutionStatus:
             "recommendation": recommendations.get(strategy_type, "Implement the strategy with proper risk management."),
             "confidence": confidence
         }
+
+def generate_mock_agent_daa_data(days: int = 30):
+    """Generate mock daily active agent (DAA) data for the past N days."""
+    today = datetime.utcnow().date()
+    data = []
+    for i in range(days):
+        date = today - timedelta(days=days - i - 1)
+        daa = random.randint(15, 120)  # Number of daily active agents
+        data.append({"date": date, "DAA": daa})
+    return pd.DataFrame(data)
+
+def generate_mock_usecase_data():
+    """Generate mock use case distribution data."""
+    use_cases = [
+        "Prediction",
+        "Optimization",
+        "Portfolio Management",
+        "Trading",
+        "Yield Farming",
+        "Analytics",
+        "Automation"
+    ]
+    proportions = [random.uniform(0.05, 0.25) for _ in use_cases]
+    total = sum(proportions)
+    proportions = [p / total for p in proportions]
+    data = [{"use_case": uc, "proportion": p} for uc, p in zip(use_cases, proportions)]
+    return pd.DataFrame(data)

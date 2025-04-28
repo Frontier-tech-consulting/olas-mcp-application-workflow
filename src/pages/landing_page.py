@@ -1,7 +1,7 @@
 import streamlit as st
 from src.utils.session_state import init_session_state, save_session_state_if_authenticated
-from src import define_stepper_section
-from src.mock_details.utils import generate_mock_agent_daa_data, generate_mock_usecase_data
+from src.components.styling import define_stepper_section
+from src.components.execution_status_mock import generate_mock_agent_daa_data, generate_mock_usecase_data
 import altair as alt
 
 def display_landing_page():
@@ -29,7 +29,7 @@ def display_landing_page():
     login_col1, login_col2, login_col3 = st.columns([2, 2, 2])
     with login_col2:
         st.markdown("<div style='text-align: center;'>", unsafe_allow_html=True)
-        if st.button("Login with Privy", key="login_button", use_container_width=True, type="primary"):
+        if st.button("Login", key="login_button", use_container_width=True, type="primary"):
             st.session_state.page = "login"
             st.rerun()
         st.markdown("</div>", unsafe_allow_html=True)

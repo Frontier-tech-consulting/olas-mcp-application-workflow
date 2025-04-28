@@ -5,8 +5,9 @@ import logging
 from datetime import datetime
 from typing import List, Dict, Any, Optional
 import uuid
-from models.models import Transaction, TransactionState, Tool, ExecutionStep
+from src.models.models import Transaction, TransactionState, Tool, ExecutionStep
 import hashlib
+from web3 import Web3
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -382,3 +383,13 @@ def generate_gnosis_safe_address(owner_address: str) -> str:
     salt = "olas-gnosis-safe"
     h = hashlib.sha256((owner_address + salt).encode()).hexdigest()
     return "0x" + h[:40]
+
+def format_eth_address(address: str) -> str:
+    """
+    Format an Ethereum address to its checksum representation using web3py.
+    Returns the checksummed address if valid, else returns the original string.
+    """
+    try:
+        return Web3.to_checksum_address(address)
+    except Exception:
+        return address

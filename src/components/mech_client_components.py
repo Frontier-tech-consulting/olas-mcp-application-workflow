@@ -82,3 +82,58 @@ def mech_client_interact_ui():
         process.wait()
         st.success("Mech request complete.")
 
+def run_mech_job_with_agent_history(
+    agent_history_json,
+    prompt=None,
+    agent_id="6",
+    tool=None,
+    chain_config="gnosis",
+    private_key_path="ethereum_private_key.txt",
+    confirm_type="on-chain",
+):
+    """
+    Run a Mech client job using the actual CLI, passing the extracted content from AgentHistoryList as the prompt.
+    Returns the parsed output (dict or string).
+    """
+    import tempfile
+    import os
+    import shlex
+    import subprocess
+    import streamlit as st
+    # 1. Extract content from AgentHistoryList
+    steps = agent_history_json
+    extracted_contents = []
+    
+    # 2. Write the prompt to a temp file if needed (or pass as arg)
+    mech_prompt = steps
+    # 3. Build the mechx interact command
+    cmd = f"mechx interact {shlex.quote(mech_prompt)} --agent_id {shlex.quote(str(agent_id))} --chain-config {shlex.quote(chain_config)} --key {shlex.quote(private_key_path)} --confirm {shlex.quote(confirm_type)}"
+    if tool:
+        cmd += f" --tool {shlex.quote(tool)}"
+    st.info(f"Running Mech job: `{cmd}`")
+    # 4. Run the command and stream output
+    process = subprocess.Popen(shlex.split(cmd), stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
+    output_lines = []
+    output_box = st.empty()
+    for line in process.stdout:
+        output_lines.append(line.rstrip())
+        output_box.code("\n".join(output_lines), language="bash")
+    process.stdout.close()
+    process.wait()
+    st.success("Mech job complete.")
+    # 5. Try to parse the last JSON object in the output (if any)
+    mech_result = None
+    for line in reversed(output_lines):
+        try:
+            parsed = json.loads(line)
+            mech_result = parsed
+            break
+        except Exception:
+            continue
+    if mech_result:
+        st.json(mech_result)
+    else:
+        st.info("Raw Mech output:")
+        st.code("\n".join(output_lines), language="bash")
+    return mech_result or output_lines
+

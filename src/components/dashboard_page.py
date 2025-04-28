@@ -2,7 +2,7 @@ import streamlit as st
 import time
 from datetime import datetime
 from src.components.request_form import RequestForm
-from utils.execution_status import ExecutionStatus
+from src.components.execution_status import ExecutionStatus
 from src.models.request import Request
 
 def format_eth_address(address):

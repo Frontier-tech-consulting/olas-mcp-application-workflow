@@ -7,7 +7,8 @@ import re
 import os
 
 
-dotenv_path = Path(__file__).resolve().parent / '.env'
+dotenv_path = Path(__file__).resolve().parent.parent.parent.resolve() / '.env'
+print(f"Loading environment variables from: {dotenv_path}")
 load_dotenv(dotenv_path=dotenv_path)
 
 # Configure logging
@@ -19,9 +20,10 @@ def init_supabase():
     # Get Supabase credentials from environment variables
     supabase_url = os.environ.get("SUPABASE_URL")
     supabase_key = os.environ.get("SUPABASE_KEY")
-    
-    if not supabase_url or not supabase_key:
-        raise ValueError("SUPABASE_URL and SUPABASE_KEY must be set in environment variables")
+    print(f"Supabase URL: {supabase_url}")
+    print(f"Supabase Key: {supabase_key}")
+    # if not supabase_url or not supabase_key:
+    #     raise ValueError("SUPABASE_URL and SUPABASE_KEY must be set in environment variables")
     
     try:
         # Extract project ID from the connection string
@@ -52,29 +54,29 @@ def init_supabase():
             logger.warning(f"Users table does not exist or is not accessible: {e}")
             logger.info("Please follow the manual setup instructions below:")
             
-            # Print instructions for manual setup
-            print("\n" + "="*80)
-            print("MANUAL SETUP INSTRUCTIONS")
-            print("="*80)
-            print("The users table does not exist in your Supabase database.")
-            print("Please follow these steps to set it up manually:")
-            print("\n1. Log in to your Supabase dashboard at https://app.supabase.com")
-            print("2. Select your project")
-            print("3. Go to the SQL Editor")
-            print("4. Copy and paste the following SQL:")
-            print("\n" + "-"*80)
-            with open('init_supabase.sql', 'r') as f:
-                print(f.read())
-            print("-"*80)
-            print("\n5. Run the SQL to create the users table")
-            print("6. Verify the table was created by checking the Table Editor")
-            print("="*80 + "\n")
+    #         # Print instructions for manual setup
+    #         print("\n" + "="*80)
+    #         print("MANUAL SETUP INSTRUCTIONS")
+    #         print("="*80)
+    #         print("The users table does not exist in your Supabase database.")
+    #         print("Please follow these steps to set it up manually:")
+    #         print("\n1. Log in to your Supabase dashboard at https://app.supabase.com")
+    #         print("2. Select your project")
+    #         print("3. Go to the SQL Editor")
+    #         print("4. Copy and paste the following SQL:")
+    #         print("\n" + "-"*80)
+    #         with open('init_supabase.sql', 'r') as f:
+    #             print(f.read())
+    #         print("-"*80)
+    #         print("\n5. Run the SQL to create the users table")
+    #         print("6. Verify the table was created by checking the Table Editor")
+    #         print("="*80 + "\n")
             
-            return False
+    #         return False
         
-    except Exception as e:
-        logger.error(f"Failed to connect to Supabase: {e}")
-        raise
+    # except Exception as e:
+    #     logger.error(f"Failed to connect to Supabase: {e}")
+    #     raise
 
 if __name__ == "__main__":
     try:

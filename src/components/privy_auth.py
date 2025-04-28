@@ -234,7 +234,7 @@ def display_mock_privy_login():
         if st.session_state.mock_privy_error:
             st.error(st.session_state.mock_privy_error)
     elif st.session_state.mock_privy_stage == 'otp':
-        st.info(f"A mock OTP has been sent to {st.session_state.mock_privy_email}. (Enter any 4-digit code)")
+        st.info(f"An OTP has been sent to {st.session_state.mock_privy_email}. ")
         with st.form("mock_privy_otp_form"):
             otp = st.text_input("Enter OTP", value=st.session_state.mock_privy_otp, max_chars=4, placeholder="Enter 4-digit code")
             submitted = st.form_submit_button("Verify")

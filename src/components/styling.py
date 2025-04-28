@@ -1,4 +1,4 @@
-from streamlit import st
+import streamlit as st
 
 def define_mainpage_styling():
     """

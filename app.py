@@ -1,3 +1,4 @@
+from browser_use import AgentHistoryList
 import mcp
 import streamlit as st
 import os
@@ -11,7 +12,7 @@ import threading
 from dotenv import load_dotenv
 
 from src.models.request import Request
-
+from browser_use import AgentHistoryList
 from src.components.request_form import RequestForm
 from src.components.staking_info_rendering import render_account_and_staking_info
 from src.components.privy_auth import display_mock_privy_login
@@ -30,7 +31,6 @@ from src.mcp_params import MCPService
 
 from src.components.process_payment import process_payment
 from src.components.mcp_app_list import app_storefront
-from src.utils.execution_status import ExecutionStatus
 
 from pathlib import Path
 from dotenv import load_dotenv
@@ -40,7 +40,7 @@ from src.utils.supabase_utils import SupabaseObj
 
 from src.pages.app_home_page import app_home
 from src.pages.landing_page import display_landing_page
-from src.pages.login_page import app_login
+# from src.pages.login_page import app_login
 
 from src.components.dashboard_page import (
     display_user_header,
@@ -61,6 +61,71 @@ from src.utils.session_state import (
 
 dotenv_path = Path(__file__).resolve().parent / '.env'
 load_dotenv(dotenv_path=dotenv_path)
+
+from src.components.mech_client_components import run_mech_job_with_agent_history
+
+def browseruse_to_mech_pipeline(agent_history_json, prompt=None):
+    """
+    Pipeline: Receives AgentHistoryList output, selects a Mech tool, runs the Mech job, and renders the filtered response.
+    - agent_history_json: JSON/dict from browser-use AgentHistoryList
+    - prompt: Optional, if you want to use the original user prompt
+    """
+    st.markdown("""
+    <h3>BrowserUse → Mech Pipeline</h3>
+    <p>This pipeline takes the output of the browser agent, selects a Mech tool, runs the Mech job, and displays the result.</p>
+    """, unsafe_allow_html=True)
+
+    # 1. Filter/Extract relevant info from AgentHistoryList
+    steps = agent_history_json
+    extracted_contents = []
+    for step in steps:
+        if 'extracted_content' in step and step['extracted_content']:
+            extracted_contents.append(str(step['extracted_content']))
+        elif 'model_outputs' in step and step['model_outputs']:
+            extracted_contents.append(str(step['model_outputs']))
+    browser_summary = "\n".join(extracted_contents)
+    st.info("**Extracted Content from Browser Agent:**\n" + browser_summary)
+
+    # 2. Use LLM to select the best Mech tool
+    available_tools = [
+        "prediction-request-rag",
+        "prediction-request-reasoning",
+        "superforcaster",
+        "prediction-offline",
+        "prediction-online",
+        "prediction-offline-sme",
+        "prediction-online-sme"
+    ]
+    from langchain_openai import ChatOpenAI
+    from langchain.prompts import ChatPromptTemplate
+    llm = ChatOpenAI(model="gpt-4o", temperature=0.1)
+    reasoning_prompt = ChatPromptTemplate.from_template(
+        """You are an expert AI agent. Given the following extracted content and the available tools, select the best tool for the next step.\n\nExtracted Content: {content}\nAvailable Tools: {tools}\n\nRespond ONLY with the tool name from the list that is the best fit."""
+    )
+    chain = reasoning_prompt | llm
+    tool_response = chain.invoke({"content": browser_summary, "tools": ", ".join(available_tools)})
+    selected_tool = None
+    for tool in available_tools:
+        if tool in tool_response.content:
+            selected_tool = tool
+            break
+    if not selected_tool:
+        selected_tool = available_tools[0]
+    st.success(f"Selected Mech Tool: {selected_tool}")
+
+    # 3. Run the actual Mech job using the CLI
+    mech_result = run_mech_job_with_agent_history(
+        agent_history_json,
+        prompt=prompt or browser_summary,
+        agent_id="6",
+        tool=selected_tool,
+        chain_config="gnosis",
+        confirm_type="on-chain",
+    )
+    return mech_result
+
+
+
 
 # Import authentication components
 from src.components.auth_page import (
@@ -103,66 +168,113 @@ def browser_extension_workflow():
     <p style='text-align:center;'>Configure and run browser automation tasks using the MCP browser agent.</p>
     """, unsafe_allow_html=True)
     
-    # User options
-    col1, col2 = st.columns(2)
-    with col1:
-        headless = st.checkbox("Run in headless mode", value=True)
-        additional_details = st.text_area("Additional Details", placeholder="Provide any extra details for the automation task...", height=80)
-    with col2:
-        steps = st.text_area("Automation Steps / Context", placeholder="Describe the browser automation steps or context here...", height=120)
+    # Single input for automation command
+    automation_command = st.text_area("Automation Command", placeholder="Describe the browser automation steps or context here...", height=120)
+    # Dropdown for Mech tool/model type
+    available_tools = [
+        "prediction-request-rag",
+        "prediction-request-reasoning",
+        "superforcaster",
+        "prediction-offline",
+        "prediction-online",
+        "prediction-offline-sme",
+        "prediction-online-sme"
+    ]
+    selected_tool = st.selectbox("Select Mech Model/Tool", options=available_tools)
+    headless = st.checkbox("Run in headless mode", value=False)
     
     # Streaming output containers
-    mech_output_placeholder = st.empty()
-    browser_output_placeholder = st.empty()
     scrollable_browser_output = st.empty()
+    browser_output_placeholder = st.empty()
+    gif_placeholder = st.empty()
+    final_result_placeholder = st.empty()
+    debug_placeholder = st.empty()
     
-    # Run button
-    if 'browser_streaming' not in st.session_state:
-        st.session_state.browser_streaming = False
-    if st.button("Run Automation (Stream Output)", type="primary") and not st.session_state.browser_streaming:
-        st.session_state.browser_streaming = True
-        st.session_state.browser_stream_chunks = []
-        def stream_browser_output():
-            import requests
-            import sseclient
-            payload = {
-                "task": steps or "Open google.com and search for OLAS.",
-                "headless": headless,
-                "steps": steps,
-                "context": steps,
-                "additional_details": additional_details
-            }
-            try:
-                # Use requests to get the SSE stream
-                with requests.post("http://localhost:8888/browser-automation-stream", json=payload, stream=True, timeout=300) as resp:
-                    client = sseclient.SSEClient(resp)
-                    browser_chunks = []
-                    for event in client.events():
-                        if event.data:
-                            data = json.loads(event.data)
-                            if data.get("type") == "browser-use":
-                                chunk = data.get("output")
-                                browser_chunks.append(str(chunk))
-                                # Update scrollable output
-                                scrollable_browser_output.markdown(
-                                    f"<div style='max-height:300px;overflow-y:auto;background:#f8f8f8;padding:10px;border-radius:6px;font-family:monospace;font-size:0.95em;'>{'<br>'.join(browser_chunks)}</div>",
-                                    unsafe_allow_html=True
-                                )
-                            elif data.get("type") == "done":
-                                st.session_state.browser_streaming = False
-                                break
-            except Exception as e:
-                browser_output_placeholder.error(f"Streaming error: {e}")
-                st.session_state.browser_streaming = False
-        # Run streaming in a thread to avoid blocking Streamlit
-        threading.Thread(target=stream_browser_output, daemon=True).start()
-    elif st.session_state.get("browser_streaming"):
-        st.info("Streaming browser-use output... (see below)")
-    # Show static result if available
-    if st.session_state.get("browser_mcp_result"):
-        st.markdown("---")
-        st.markdown("**Automation Result:**")
-        st.text_area("Result", st.session_state.browser_mcp_result, height=200)
+    if st.button("Run Automation & Mech", type="primary"):
+        payload = {
+            "task": automation_command or "Open google.com and search for OLAS.",
+            "headless": headless,
+            "steps": automation_command,
+            "context": automation_command,
+        }
+        import requests
+        import sseclient
+        import base64
+        debug_events = []
+        agent_history_json = None
+        extracted_content_json = None
+        try:
+            with requests.post("http://localhost:8888/browser-automation-stream", json=payload, stream=True, timeout=300) as resp:
+                client = sseclient.SSEClient(resp)
+                result = None
+                for event in client.events():
+                    debug_events.append(event.data)
+                    debug_placeholder.code("\n".join(debug_events), language="json")
+                    if event.data:
+                        data = json.loads(event.data)
+                        agent_history_json = data.get("result")
+                        st.markdown("### Output Scraping Data")
+                        if agent_history_json is not None:
+                            st.json(agent_history_json)
+                        else:
+                            st.info("No extracted content found in AgentHistoryList.")
+                        browser_chunks = getattr(st.session_state, 'browser_chunks', [])
+                        browser_chunks.append(json.dumps(data, indent=2, ensure_ascii=False))
+                        st.session_state.browser_chunks = browser_chunks
+                        scrollable_browser_output.markdown(
+                            f"<div style='max-height:400px;overflow-y:auto;'>{'<br><br>'.join(browser_chunks)}" + "</div>",
+                            unsafe_allow_html=True
+                        )
+                    if event.data and data.get("type") == "done":
+                        st.success("Automation complete.")
+                        break
+            # After streaming, if we have the agent history, call the /mech-job-stream endpoint and stream output
+            if agent_history_json:
+                st.markdown("### Mech Client Output (Streaming)")
+                # Convert browseruse output to a string for the prompt
+                browseruse_text = ""
+                if isinstance(agent_history_json, dict) and 'history' in agent_history_json:
+                    extracted_contents = []
+                    for step in agent_history_json['history']:
+                        if 'result' in step and step['result']:
+                            for r in step['result']:
+                                if r.get('extracted_content'):
+                                    extracted_contents.append(str(r['extracted_content']))
+                    browseruse_text = "\n".join(extracted_contents)
+                elif isinstance(agent_history_json, str):
+                    browseruse_text = agent_history_json
+                else:
+                    browseruse_text = str(agent_history_json)
+                mech_payload = {
+                    "agent_history_json": None,  # Not used as prompt, just pass as string
+                    "prompt": browseruse_text or automation_command,
+                    "agent_id": "6",
+                    "tool": selected_tool,
+                    "chain_config": "gnosis",
+                    "private_key_path": os.path.abspath("ethereum_private_key.txt"),
+                    "confirm_type": "on-chain"
+                }
+                try:
+                    with requests.post("http://localhost:8888/mech-job-stream", json=mech_payload, stream=True, timeout=600) as mech_resp:
+                        mech_client = sseclient.SSEClient(mech_resp)
+                        mech_lines = []
+                        for event in mech_client.events():
+                            if event.data:
+                                try:
+                                    line_data = json.loads(event.data)
+                                    if 'line' in line_data:
+                                        mech_lines.append(line_data['line'])
+                                        st.code("\n".join(mech_lines), language="bash")
+                                    elif line_data.get('type') == 'done':
+                                        st.success("Mech job complete.")
+                                except Exception:
+                                    continue
+                except Exception as e:
+                    st.error(f"Mech job streaming error: {e}")
+        except Exception as e:
+            browser_output_placeholder.error(f"Streaming error: {e}")
+
+# ...existing code...
 
 def main():
     # Initialize session state if needed
@@ -195,7 +307,7 @@ def main():
             st.session_state.page = 'app_storefront'
             st.rerun()
         else:
-            app_login()
+            display_mock_privy_login()
     elif st.session_state.page == 'app_storefront':
         app_storefront()
     elif st.session_state.page == 'verify':
@@ -246,3 +358,4 @@ if __name__ == "__main__":
     
     # Call main function with all app logic
     main()
+

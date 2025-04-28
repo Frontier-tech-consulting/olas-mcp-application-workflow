@@ -1,7 +1,7 @@
 import streamlit as st
 from src.components.styling import display_user_header
 from src.components.process_payment import process_payment
-
+from src.components.execution_status import ExecutionStatus
 def app_execution_page():
     """
     Application execution page showing service execution status

@@ -1,4 +1,3 @@
-from mcp.server import MCPServer
 from src.services.mcp_service import MCPService
 import os
 
